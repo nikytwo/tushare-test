@@ -77,10 +77,14 @@ def load_report(year, quarter):
     if os.path.exists(file_name):
         df_reports = pd.read_csv(file_name)
     else:
-        df_reports = ts.get_report_data(year, quarter)
-        df_reports.to_csv(file_name)
+        try:
+            df_reports = ts.get_report_data(year, quarter)
+            df_reports.to_csv(file_name)
+        except Exception as ex:
+            print ex
+            df_reports = load_report(year - 1, quarter)
+            df_reports.drop(df_reports.index, inplace=True)
     return df_reports
-
 
 def load_profits(year, quarter):
     """
@@ -105,8 +109,13 @@ def load_profits(year, quarter):
     if os.path.exists(file_name):
         df_profits = pd.read_csv(file_name)
     else:
-        df_profits = ts.get_profit_data(year, quarter)
-        df_profits.to_csv(file_name)
+        try:
+            df_profits = ts.get_profit_data(year, quarter)
+            df_profits.to_csv(file_name)
+        except Exception as ex:
+            print ex
+            df_profits = load_profits(year - 1, quarter)
+            df_profits.drop(df_profits.index, inplace=True)
     return df_profits
 
 
@@ -171,22 +180,47 @@ def save_industry(df_stocks, df_industry):
 
 
 def load_k_data(code='000001', year='2017'):
-    file_name = code + 'd_qfq' + year + '.csv'
+    i_year = int(year)
+    file_name = 'k_data/%sd_qfq%d.csv' % (code, i_year)
     if os.path.exists(file_name):
         k = pd.read_csv(file_name)
     else:
-        s = year + '-01-01'
-        e = year + '-12-31'
+        s = '%d-01-01' % i_year
+        e = '%d-12-31' % i_year
         k = ts.get_k_data(code, start=s, end=e, pause=5)
         k.to_csv(file_name)
     return k
 
 
-def load_pe(code='000001', year=2016):
+def load_tick_data(code, date):
+    file_name = 'tick_data/%s/%s_tick_data_%s.csv' % (code, code, date)
+    if os.path.exists(file_name):
+        df = pd.read_csv(file_name)
+    else:
+        df = ts.get_tick_data(code, date, pause=5)
+        df.to_csv(file_name)
+
+    return df
+
+
+def load_pe(code='000001', years=None):
     """
     指定code的全年的 pe 数据
     """
+    if years is None:
+        years = [2016, 2017]
 
+    avgs = []
+    for year in years:
+        avg = _load_pe(code, year)
+        avgs.append(avg)
+    avg = pd.concat(avgs, axis=1)
+    avg.columns = years
+
+    return avg
+
+
+def _load_pe(code, year):
     if datetime.datetime.now().year == year:
         stocks = load_stocks()
         s = stocks[stocks['code'].isin([code])].loc[:, ['pe', 'npr']]
@@ -197,12 +231,64 @@ def load_pe(code='000001', year=2016):
         eps = trade / pe
     else:
         report = load_report(year, 4)
-        p = report[report['code'].isin([code])].loc[:, ['eps', 'net_profits', 'profits_yoy']]
+        p = report[report['code'].isin([code])].loc[:, ['eps', 'net_profits']]
         eps = p.iloc[0, 0]
     print eps
 
     k = load_k_data(code, str(year))
     return k.loc[:, ['high', 'low']].mean(1).apply(lambda x: x / eps)
+
+
+def load_profits_analysis(code='000001', years=None):
+    if years is None:
+        years = [2016, 2017]
+    df = pd.DataFrame()
+    for year in years:
+        p_obj = {}
+        for quarter in range(1,5):
+            report = load_profits(year, quarter)
+            p = report[report['code'].isin([code])].loc[:,['net_profits', 'business_income']]
+            if len(p.index) == 0:
+                p_obj.setdefault(str(quarter), 0)
+            else:
+                p_obj.setdefault(str(quarter), p.iloc[0, 0])
+        tmp = pd.DataFrame(data=p_obj, index=['%dp' % year])
+        df = df.append(tmp)
+
+    for year in years:
+        bi_obj = {}
+        for quarter in range(1,5):
+            report = load_profits(year, quarter)
+            p = report[report['code'].isin([code])].loc[:,['net_profits', 'business_income']]
+            if len(p.index) == 0:
+                bi_obj.setdefault(str(quarter), 0)
+            else:
+                bi_obj.setdefault(str(quarter), p.iloc[0, 1] / 5)
+        tmp = pd.DataFrame(data=bi_obj, index=['%dbi' % year])
+        df = df.append(tmp)
+
+    print df
+    return df
+
+
+def show_plot(code):
+    stocks = load_stocks()
+    name = stocks[stocks['code'].isin([code])].loc[:, ['name']].iloc[0, 0]
+    print code, name
+    fig, axes = plt.subplots(2, 2)
+
+    years = [2015, 2016, 2017]
+    avg = load_pe(code, years)
+    avg.plot(ax=axes[0, 0])
+    title = '%s pe' % code
+    axes[0, 0].set_title(title)
+
+    yoy = load_profits_analysis(code, years)
+    yoy.T.plot.bar(ax=axes[0, 1])
+    title = '%s profits' % code
+    axes[0, 1].set_title(title)
+
+    plt.show()
 
 
 if __name__ == '__main__':
@@ -226,39 +312,51 @@ if __name__ == '__main__':
     # tmp_df = df_stocks[df_stocks['industry'].isin(industry.tolist())]
     # print tmp_df['code'].tolist()
 
-    codes = ['600507',
-             '601222',
-             '600522',
-             '600549',
-             '600703',
-             '600309',
-             '601012',
-             '600409',
-             '002636',
-             '002185',
-             '002171',
-             '002460',
-             '002466']
+    codes = ['600507',  # 方大
+             '601222',  # 林洋
+             # '601012',  # 隆基
+             '600309',  # 万化
+             '600409',  # 三友
+             # '600703',  # 三安
+             '002636',  # 金安
+             # '600522',  # 中天
+             # '002185',  # 华天
+             # '002171',  # 楚江
+             '600549',  # 夏门
+             '002460',  # 赣锋
+             # '002466'  # 天齐
+            ]
+    code = '002636'
+    # show_plot(code)
 
-    code = '000001'
-    years = ['2016', '2017']
-    avgs = []
-    for year in years:
-        avg = load_pe(code, int(year))
-        avgs.append(avg)
+    # for code in codes:
+    #     show_plot(code)
 
-    avg = pd.concat(avgs, axis=1)
-    avg.columns = years
-    print avg
-    stocks = load_stocks()
-    name = stocks[stocks['code'].isin([code])].loc[:, ['name']].iloc[0, 0]
-    print code, name
-
+    # 历史分笔
     fig, axes = plt.subplots(2, 2)
-    avg.plot(ax=axes[0,0])
-    axes[0, 0].set_title('pe')
-    plt.show()
 
+    source = load_tick_data(code, '2017-12-01')
+    source = source.set_index(['time']).sort_index()
+    df = source.loc[:, ['price']]
+    df.plot(ax=axes[0, 0])
+    title = '%s price' % code
+    axes[0, 0].set_title(title)
+
+    df = source.replace({'卖盘':-1, '中性盘':0, '买盘':1})
+    df = df['volume'] * df['type']
+    df.plot(ax=axes[1, 0])
+    title = '%s volume' % code
+    axes[1, 0].set_title(title)
+
+    df = source.loc[:, ['price', 'type', 'volume']]
+    df = df.replace({'卖盘':-1, '中性盘':0, '买盘':1})
+    df = df.groupby(['price', 'type']).sum()
+    print df
+    df.plot(ax=axes[1, 1])
+    title = '%s volume' % code
+    axes[0, 1].set_title(title)
+
+    plt.show()
 
     # 实时
     # quotes = ts.get_realtime_quotes('sh')
