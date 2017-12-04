@@ -6,6 +6,7 @@ import datetime
 import pandas as pd
 import matplotlib.pyplot as plt
 import tushare as ts
+import time
 
 import sys
 
@@ -179,6 +180,16 @@ def save_industry(df_stocks, df_industry):
     s_b_industry.to_csv(file_name)
 
 
+def load_concept():
+    file_name = 'concept_classified.csv'
+    if os.path.exists(file_name):
+        df = pd.read_csv(file_name)
+    else:
+        df = ts.get_concept_classified()
+        df.to_csv(file_name)
+    return df
+
+
 def load_k_data(code='000001', year='2017'):
     i_year = int(year)
     file_name = 'k_data/%sd_qfq%d.csv' % (code, i_year)
@@ -291,6 +302,40 @@ def show_plot(code):
     plt.show()
 
 
+def my_graph(code, date='2017-12-01'):
+    source = load_tick_data(code, date)
+    times = source['time'].apply(lambda x: x[:5])
+    dfs = [source, times]
+    source = pd.concat(dfs, axis=1)
+    source.columns = ['0', 'time', 'price', 'change', 'volume', 'amount', 'type', 'T']
+    print source
+    fig, axes = plt.subplots(2, 2)
+
+    # show price
+    source = source.set_index(['time']).sort_index()
+    df = source.loc[:, ['price']]
+    df.plot(ax=axes[0, 0])
+
+    # show volume
+    title = '%s price' % code
+    axes[0, 0].set_title(title)
+    df = source.replace({'卖盘': -1, '中性盘': 0, '买盘': 1})
+    df = df['volume'] * df['type']
+    df.plot(ax=axes[1, 0])
+
+    # show volume
+    title = '%s volume' % code
+    axes[1, 0].set_title(title)
+    df = source.loc[:, ['T', 'type', 'volume']]
+    df = df.replace({'卖盘': -1, '中性盘': 0, '买盘': 1})
+    df = df.groupby(['T', 'type']).sum()
+    df.plot(ax=axes[0, 1])
+    title = '%s volume' % code
+    axes[0, 1].set_title(title)
+
+    plt.show()
+
+
 if __name__ == '__main__':
     reload(sys)
     sys.setdefaultencoding('utf-8')
@@ -312,52 +357,51 @@ if __name__ == '__main__':
     # tmp_df = df_stocks[df_stocks['industry'].isin(industry.tolist())]
     # print tmp_df['code'].tolist()
 
-    codes = ['600507',  # 方大
-             '601222',  # 林洋
-             # '601012',  # 隆基
-             '600309',  # 万化
-             '600409',  # 三友
-             # '600703',  # 三安
-             '002636',  # 金安
-             # '600522',  # 中天
-             # '002185',  # 华天
-             # '002171',  # 楚江
-             '600549',  # 夏门
-             '002460',  # 赣锋
-             # '002466'  # 天齐
-            ]
-    code = '002636'
+    codes = [
+        # '600507',  # 方大
+        '601222',  # 林洋
+        # '601012',  # 隆基
+        '600309',  # 万化
+        '600409',  # 三友
+        # '600703',  # 三安
+        '002636',  # 金安
+        # '002171',  # 楚江
+        '600549',  # 夏门
+        '002460',  # 赣锋
+        # '600522',  # 中天
+        # '002185',  # 华天
+        # '600703',  # 三安
+        '002019',  # 亿帆
+        '000338',  # 潍柴
+        # '002745',  # 木林森
+        '603369',  # 今世缘
+        # '002749',  # 国光
+        # '002136',  # 安 纳 达
+        # '002195'   # 2345
+        # '002466'  # 天齐
+    ]
+    code = '002019'
     # show_plot(code)
 
     # for code in codes:
     #     show_plot(code)
 
     # 历史分笔
-    fig, axes = plt.subplots(2, 2)
-
-    source = load_tick_data(code, '2017-12-01')
-    source = source.set_index(['time']).sort_index()
-    df = source.loc[:, ['price']]
-    df.plot(ax=axes[0, 0])
-    title = '%s price' % code
-    axes[0, 0].set_title(title)
-
-    df = source.replace({'卖盘':-1, '中性盘':0, '买盘':1})
-    df = df['volume'] * df['type']
-    df.plot(ax=axes[1, 0])
-    title = '%s volume' % code
-    axes[1, 0].set_title(title)
-
-    df = source.loc[:, ['price', 'type', 'volume']]
-    df = df.replace({'卖盘':-1, '中性盘':0, '买盘':1})
-    df = df.groupby(['price', 'type']).sum()
-    print df
-    df.plot(ax=axes[1, 1])
-    title = '%s volume' % code
-    axes[0, 1].set_title(title)
-
-    plt.show()
+    today = datetime.datetime.now()
+    date = today.strftime("%Y-%m-%d")
+    # date = '2017-11-30'
+    # my_graph(code, date)
 
     # 实时
-    # quotes = ts.get_realtime_quotes('sh')
-    # print quotes.loc[:, ['price', 'high', 'low', 'volume', 'amount']]
+    df = ts.get_realtime_quotes('sh')
+    for code in codes:
+        quotes = ts.get_realtime_quotes(code)
+        df = df.append(quotes)
+    # print df.loc[:, ['code', 'price', 'high', 'low', 'volume', 'amount']]
+    print df.loc[:, ['code', 'price', 'high', 'low']]
+
+    # 筛选
+
+    # df = load_concept()
+    # param = df[df['code'].isin(['002136'])].iloc([0,1])
+    # print param
