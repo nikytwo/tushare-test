@@ -87,6 +87,7 @@ def load_report(year, quarter):
             df_reports.drop(df_reports.index, inplace=True)
     return df_reports
 
+
 def load_profits(year, quarter):
     """
     加载所有股票指定年份和季度的盈利能力列表。
@@ -205,6 +206,9 @@ def load_k_data(code='000001', year='2017'):
 
 def load_tick_data(code, date):
     file_name = 'tick_data/%s/%s_tick_data_%s.csv' % (code, code, date)
+    path = os.path.split(file_name)[0]
+    if not os.path.exists(path):
+        os.makedirs(path)
     if os.path.exists(file_name):
         df = pd.read_csv(file_name)
     else:
@@ -212,6 +216,7 @@ def load_tick_data(code, date):
         df.to_csv(file_name)
 
     return df
+
 
 
 def load_pe(code='000001', years=None):
@@ -256,9 +261,9 @@ def load_profits_analysis(code='000001', years=None):
     df = pd.DataFrame()
     for year in years:
         p_obj = {}
-        for quarter in range(1,5):
+        for quarter in range(1, 5):
             report = load_profits(year, quarter)
-            p = report[report['code'].isin([code])].loc[:,['net_profits', 'business_income']]
+            p = report[report['code'].isin([code])].loc[:, ['net_profits', 'business_income']]
             if len(p.index) == 0:
                 p_obj.setdefault(str(quarter), 0)
             else:
@@ -268,9 +273,9 @@ def load_profits_analysis(code='000001', years=None):
 
     for year in years:
         bi_obj = {}
-        for quarter in range(1,5):
+        for quarter in range(1, 5):
             report = load_profits(year, quarter)
-            p = report[report['code'].isin([code])].loc[:,['net_profits', 'business_income']]
+            p = report[report['code'].isin([code])].loc[:, ['net_profits', 'business_income']]
             if len(p.index) == 0:
                 bi_obj.setdefault(str(quarter), 0)
             else:
@@ -282,29 +287,57 @@ def load_profits_analysis(code='000001', years=None):
     return df
 
 
-def show_plot(code):
+def load_volume(code, date):
+    source = load_tick_data(code, date)
+    df = source.loc[:, ['type', 'volume']]
+    df = df.replace({'卖盘': -1, '中性盘': 0, '买盘': 1})
+    df = df.groupby(['type']).sum()
+    df['date'] = date
+    return df
+
+
+def show_plot(code, ):
     stocks = load_stocks()
     name = stocks[stocks['code'].isin([code])].loc[:, ['name']].iloc[0, 0]
     print code, name
     fig, axes = plt.subplots(2, 2)
 
-    years = [2015, 2016, 2017]
+    years = [2016, 2017]
     avg = load_pe(code, years)
     avg.plot(ax=axes[0, 0])
     title = '%s pe' % code
     axes[0, 0].set_title(title)
 
     yoy = load_profits_analysis(code, years)
-    yoy.T.plot.bar(ax=axes[0, 1])
+    yoy.T.plot.bar(ax=axes[1, 0])
     title = '%s profits' % code
-    axes[0, 1].set_title(title)
+    axes[1, 0].set_title(title)
+
+    # k = load_k_data(code)
+    # volume_b = pd.DataFrame()
+    # volume_s = pd.DataFrame()
+    # for index, row in k.iterrows():
+    #     date = row['date']
+    #     tmp = load_volume(code, date)
+    #     volume_b = volume_b.append(tmp.loc[[1], :])
+    #     volume_s = volume_s.append(tmp.loc[[-1], :])
+    # volume_b = volume_b.set_index(['date'])
+    # volume_b.columns = ['B']
+    # volume_s = volume_s.set_index(['date'])
+    # volume_s.columns = ['S']
+    # volume = volume_b.sub(volume_s['S'], axis='index')
+    # k = load_k_data(code)
+    # k = k.set_index(['date']).loc[:, ['low']].apply(lambda x: x * 50000)
+    # b_p = pd.concat([volume, k], axis=1)
+    # print b_p
+    # b_p.plot(ax=axes[0, 1])
 
     plt.show()
 
 
-def my_graph(code, date='2017-12-01'):
+def show_date_p(code, date='2017-12-01'):
     source = load_tick_data(code, date)
-    times = source['time'].apply(lambda x: x[:5])
+    times = source['time'].apply(lambda x: '%s:00' % x[:5])
     dfs = [source, times]
     source = pd.concat(dfs, axis=1)
     source.columns = ['0', 'time', 'price', 'change', 'volume', 'amount', 'type', 'T']
@@ -312,26 +345,52 @@ def my_graph(code, date='2017-12-01'):
     fig, axes = plt.subplots(2, 2)
 
     # show price
+    title = '%s price' % code
+    axes[0, 0].set_title(title)
     source = source.set_index(['time']).sort_index()
     df = source.loc[:, ['price']]
     df.plot(ax=axes[0, 0])
 
-    # show volume
-    title = '%s price' % code
-    axes[0, 0].set_title(title)
-    df = source.replace({'卖盘': -1, '中性盘': 0, '买盘': 1})
-    df = df['volume'] * df['type']
-    df.plot(ax=axes[1, 0])
+    # title = '%s day' % code
+    # axes[0, 1].set_title(title)
+    # df = source.loc[:, ['type', 'volume']]
+    # df = df.replace({'卖盘': -1, '中性盘': 0, '买盘': 1})
+    # df = df.groupby(['type']).sum()
+    # df.plot.bar(ax=axes[0, 1])
 
     # show volume
-    title = '%s volume' % code
+    # title = '%s price' % code
+    # axes[1, 0].set_title(title)
+    # df = source.replace({'卖盘': -1, '中性盘': 0, '买盘': 1})
+    # df = df['volume'] * df['type']
+    # df.plot(ax=axes[1, 0])
+
+    # show volume
+    title = '%s B' % code
     axes[1, 0].set_title(title)
     df = source.loc[:, ['T', 'type', 'volume']]
     df = df.replace({'卖盘': -1, '中性盘': 0, '买盘': 1})
-    df = df.groupby(['T', 'type']).sum()
-    df.plot(ax=axes[0, 1])
-    title = '%s volume' % code
-    axes[0, 1].set_title(title)
+    b = df[df.type == 1].loc[:, ['T', 'volume']]
+    b = b.groupby(['T']).sum()
+    z = df[df.type == 0].loc[:, ['T', 'volume']]
+    z = z.groupby(['T']).sum()
+    s = df[df.type == -1].loc[:, ['T', 'volume']]
+    s = s.groupby(['T']).sum()
+    df = pd.concat([s, b], axis=1)
+    df.columns = ['S', 'B']
+    df = df.sub(df['S'], axis='index').loc[:, ['B']]
+    print df
+    df.plot.bar(ax=axes[1, 0])
+
+    # show volume
+    # title = '%s B' % code
+    # axes[1, 1].set_title(title)
+    # df = source.loc[:, ['T', 'type', 'volume']]
+    # df = df.replace({'卖盘': -1, '中性盘': 0, '买盘': 1})
+    # df = df[df.type == -1]
+    # df = df.groupby(['T', 'type']).sum()
+    # print df
+    # df.plot.bar(ax=axes[1, 1])
 
     plt.show()
 
@@ -370,17 +429,17 @@ if __name__ == '__main__':
         '002460',  # 赣锋
         # '600522',  # 中天
         # '002185',  # 华天
-        # '600703',  # 三安
-        '002019',  # 亿帆
-        '000338',  # 潍柴
         # '002745',  # 木林森
+        # '600703',  # 三安
+        # '002019',  # 亿帆
+        '000338',  # 潍柴
         '603369',  # 今世缘
         # '002749',  # 国光
         # '002136',  # 安 纳 达
         # '002195'   # 2345
         # '002466'  # 天齐
     ]
-    code = '002019'
+    code = '000338'
     # show_plot(code)
 
     # for code in codes:
@@ -389,16 +448,16 @@ if __name__ == '__main__':
     # 历史分笔
     today = datetime.datetime.now()
     date = today.strftime("%Y-%m-%d")
-    # date = '2017-11-30'
-    # my_graph(code, date)
+    date = '2017-12-04'
+    # for code in codes:
+    #     show_date_p(code, date)
 
     # 实时
     df = ts.get_realtime_quotes('sh')
-    for code in codes:
-        quotes = ts.get_realtime_quotes(code)
-        df = df.append(quotes)
-    # print df.loc[:, ['code', 'price', 'high', 'low', 'volume', 'amount']]
+    quotes = ts.get_realtime_quotes(codes)
+    df = df.append(quotes)
     print df.loc[:, ['code', 'price', 'high', 'low']]
+    # print df.loc[:, ['code', 'price', 'high', 'low', 'volume', 'amount']]
 
     # 筛选
 
