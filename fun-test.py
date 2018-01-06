@@ -11,7 +11,7 @@ import time
 import sys
 
 
-def load_stocks():
+def load_stocks(date=None):
     """
     加载所有股票列表。
     若列表文件‘stock-list.csv’不存在，则下载
@@ -19,7 +19,13 @@ def load_stocks():
     :return:   
     :rtype: DataFrame
     """
-    file_name = 'stock-list.csv'
+    if date == None:
+        today = datetime.datetime.now()
+        date = today.strftime("%Y-%m-%d")
+    file_name = 'stock-list/stock-list_%s.csv' % date
+    path = os.path.split(file_name)[0]
+    if not os.path.exists(path):
+        os.makedirs(path)
     if os.path.exists(file_name):
         df_stocks = pd.read_csv(file_name)
     else:
@@ -218,7 +224,6 @@ def load_tick_data(code, date):
     return df
 
 
-
 def load_pe(code='000001', years=None):
     """
     指定code的全年的 pe 数据
@@ -237,18 +242,30 @@ def load_pe(code='000001', years=None):
 
 
 def _load_pe(code, year):
+    stocks = load_stocks()
+
+    s = stocks[stocks['code'].isin([code])]
+    s = s.loc[:, ['pe', 'npr', 'totals']]
+    today = load_today_price()
+    t = today[today['code'].isin([code])].loc[:, ['trade', 'mktcap']]
+    trade = t.iloc[0, 0]
+    pe = s.iloc[0, 0]
+    cur_eps = trade / pe
+    totals = s.iloc[0, 2]
+    cur_net_profits = totals * cur_eps * 10000
     if datetime.datetime.now().year == year:
-        stocks = load_stocks()
-        s = stocks[stocks['code'].isin([code])].loc[:, ['pe', 'npr']]
-        today = load_today_price()
-        t = today[today['code'].isin([code])].loc[:, ['trade', 'mktcap']]
-        trade = t.iloc[0, 0]
-        pe = s.iloc[0, 0]
-        eps = trade / pe
+        eps = cur_eps
+        net_profits = cur_net_profits
+        totals = net_profits / eps
+        print '%d net_profits: %s' % (year, net_profits)
     else:
         report = load_report(year, 4)
         p = report[report['code'].isin([code])].loc[:, ['eps', 'net_profits']]
+        net_profits = p.iloc[0, 1]
         eps = p.iloc[0, 0]
+        totals = net_profits / eps
+        eps = net_profits * cur_eps /cur_net_profits
+        print '%d net_profits: %s' % (year, net_profits)
     print eps
 
     k = load_k_data(code, str(year))
@@ -296,13 +313,14 @@ def load_volume(code, date):
     return df
 
 
-def show_plot(code, ):
+def show_plot(code, years=None):
+    if years is None:
+        years = [2016, 2017]
     stocks = load_stocks()
     name = stocks[stocks['code'].isin([code])].loc[:, ['name']].iloc[0, 0]
     print code, name
     fig, axes = plt.subplots(2, 2)
 
-    years = [2016, 2017]
     avg = load_pe(code, years)
     avg.plot(ax=axes[0, 0])
     title = '%s pe' % code
@@ -417,29 +435,48 @@ if __name__ == '__main__':
     # print tmp_df['code'].tolist()
 
     codes = [
-        # '600507',  # 方大
+        '600507',  # 方大
+        # 600282 南钢股份
+        # 002110 三钢闽光
+        # 600808 马钢股份
         '601222',  # 林洋
+        '600651', # 飞乐音响
         # '601012',  # 隆基
         '600309',  # 万化
         '600409',  # 三友
-        # '600703',  # 三安
         '002636',  # 金安
-        # '002171',  # 楚江
+        '002171',  # 楚江
         '600549',  # 夏门
         '002460',  # 赣锋
+        # 600711 盛屯矿业
+        # '002466',  # 天齐
         # '600522',  # 中天
         # '002185',  # 华天
         # '002745',  # 木林森
         # '600703',  # 三安
-        # '002019',  # 亿帆
+        # 002449 国星光电
+        '002019',  # 亿帆
         '000338',  # 潍柴
         '603369',  # 今世缘
         # '002749',  # 国光
-        # '002136',  # 安 纳 达
-        # '002195'   # 2345
-        # '002466'  # 天齐
+        '002136',  # 安 纳 达
+        # 002601 龙蟒佰利
+        # '002092', # 中泰化学
+        # 002564 天沃科技
+        '002195',   # 2345
+        # '603588', # 高能环境
+        # '600260', # 凯乐科技
+        '603002', # 宏昌电子
+        # 002496 辉丰股份
+        # 600079 人福医药
+        # 601233 桐昆股份
+        # 000703 恒逸石化
+        # 000528 柳 工
+        # 600031 三一重工
+        # 000591 太阳能
+        # 600260 凯乐科技
     ]
-    code = '000338'
+    code = '600487'
     # show_plot(code)
 
     # for code in codes:
@@ -453,10 +490,10 @@ if __name__ == '__main__':
     #     show_date_p(code, date)
 
     # 实时
-    df = ts.get_realtime_quotes('sh')
-    quotes = ts.get_realtime_quotes(codes)
-    df = df.append(quotes)
-    print df.loc[:, ['code', 'price', 'high', 'low']]
+    # df = ts.get_realtime_quotes('sh')
+    # quotes = ts.get_realtime_quotes(codes)
+    # df = df.append(quotes)
+    # print df.loc[:, ['code', 'price', 'high', 'low']]
     # print df.loc[:, ['code', 'price', 'high', 'low', 'volume', 'amount']]
 
     # 筛选
@@ -464,3 +501,12 @@ if __name__ == '__main__':
     # df = load_concept()
     # param = df[df['code'].isin(['002136'])].iloc([0,1])
     # print param
+    #
+    s = load_stocks()
+    s = s[s['profit'] > 50][s['rev'] > 20][s['pe'] < 35][s['pe'] > 2]
+    s1 = s[(s['code'] > 600000) | (s['code'] < 300000) ]
+    s1.sort_values(['industry', 'pe']).to_csv('my_stock_171226.csv')
+    print s1.sort_values(['industry', 'pe'])[['code', 'name', 'industry', 'pe', 'rev', 'profit']]
+
+
+
