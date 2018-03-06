@@ -1,12 +1,11 @@
 # -*- coding:utf-8 -*-
+import ConfigParser
 import datetime
 import os
-import time
-import ConfigParser
-
 import sys
-import tushare as ts
+import time
 
+import tushare as ts
 
 # 加载配置
 config = ConfigParser.ConfigParser()
@@ -59,13 +58,28 @@ def save_real_time(df, last_df=None):
 
     return df2
 
+
+def do_pref(pre_close, price):
+    return (price - pre_close) / pre_close * 100
+
+
+def set_float_type(df):
+    df[["price"]] = df[["price"]].astype(float)
+    df[["pre_close"]] = df[["pre_close"]].astype(float)
+    df[["low"]] = df[["low"]].astype(float)
+
+
 if __name__ == '__main__':
     reload(sys)
     sys.setdefaultencoding('utf-8')
 
+    col_names.append("Ration")
     df2 = None
     while True:
         df = ts.get_realtime_quotes(show_only_codes)
+        set_float_type(df)
+        df = df.assign(Ration = (df.price - df.pre_close) / df.pre_close * 100)
+
         print df.loc[:, col_names]
 
         cur_hour = datetime.datetime.now().hour
@@ -78,6 +92,10 @@ if __name__ == '__main__':
             time.sleep(3)
             continue
         df = ts.get_realtime_quotes(codes)
+
+        set_float_type(df)
+        df = df.assign(Ration = (df.price - df.pre_close) / df.pre_close * 100)
+
         print df[col_names]
         df2 = save_real_time(df, df2)
         time.sleep(3)
