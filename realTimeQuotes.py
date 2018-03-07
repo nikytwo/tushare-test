@@ -82,12 +82,15 @@ if __name__ == '__main__':
 
         print df.loc[:, col_names]
 
-        cur_hour = datetime.datetime.now().hour
-        if cur_hour < 9:
+        today = datetime.datetime.today()
+        clock_9 = datetime.datetime(today.year, today.month, today.day, hour=9, minute=0)
+        clock_15_10 = datetime.datetime(today.year, today.month, today.day, hour=15, minute=10)
+        cur_time = datetime.datetime.now()
+        if cur_time < clock_9:
             print 'stock not start'
             time.sleep(3)
             continue
-        if cur_hour > 14:
+        if cur_time > clock_15_10:
             print 'stock end'
             time.sleep(3)
             continue
